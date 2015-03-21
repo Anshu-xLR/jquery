@@ -329,8 +329,6 @@ jQuery.extend({
 			first[ i++ ] = second[ j ];
 		}
 
-		first.length = i;
-
 		return first;
 	},
 
