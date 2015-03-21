@@ -44,14 +44,21 @@ jQuery.ajaxTransport(function( options ) {
 			send: function( headers, complete ) {
 				var i,
 					xhr = options.xhr(),
-					id = ++xhrId;
+					id = ++xhrId,
+					xhrUsername = "",
+					xhrPassword = "";
 
+				// Use the default way to authenticate if not using Authorization header
+				if ( options.authByHeader !== true ) {
+					xhrUsername = options.username;
+					xhrPassword = options.password;
+				}
 				xhr.open(
 					options.type,
 					options.url,
 					options.async,
-					options.username,
-					options.password
+					xhrUsername,
+					xhrPassword
 				);
 
 				// Apply custom fields if provided
@@ -73,6 +80,63 @@ jQuery.ajaxTransport(function( options ) {
 				// For same-domain requests, won't change header if already provided.
 				if ( !options.crossDomain && !headers["X-Requested-With"] ) {
 					headers["X-Requested-With"] = "XMLHttpRequest";
+				}
+
+				// Function to make required corrections for UTF-8 compliant text
+				function utf8Encode ( text ) {
+					var utftext = "", n, c;
+					text = text.replace( /\r\n/g, "\n" );
+					for ( n = 0; n < text.length; n++ ) {
+						c = text.charCodeAt(n);
+						if (c < 128) {
+							utftext += String.fromCharCode(c);
+						} else if ( ( c > 127 ) && ( c < 2048 ) ) {
+							utftext += String.fromCharCode ( ( c >> 6 ) | 192 );
+							utftext += String.fromCharCode ( ( c & 63 ) | 128 );
+						} else {
+							utftext += String.fromCharCode ( ( c >> 12 ) | 224 );
+							utftext += String.fromCharCode ( ( ( c >> 6 ) & 63 ) | 128 );
+							utftext += String.fromCharCode ( ( c & 63 ) | 128 );
+						}
+					}
+					return utftext;
+				}
+
+				// Function to generate Base 64 encoded data of the input text
+				function generateBase64 ( text ) {
+					// Ensuring UTF-8 encoded text
+					text = utf8Encode ( text );
+					// UTF-8 Base 64 encoding characters
+					var encoder =
+						"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=",
+
+						// Character and Encoded variables for loop
+						c1, c2, c3, e1, e2, e3, e4,
+						i = 0,
+						encoded = "";
+
+					while ( i < text.length ) {
+						c1 = text.charCodeAt ( i++ );
+						c2 = text.charCodeAt ( i++ );
+						c3 = text.charCodeAt ( i++ );
+						e1 = c1 >> 2;
+						e2 = (c1 & 3) << 4 | c2 >> 4;
+						e3 = (c2 & 15) << 2 | c3 >> 6;
+						e4 = c3 & 63;
+						if ( isNaN( c2 ) ) {
+							e3 = e4 = 64;
+						} else if ( isNaN( c3 ) ) {
+							e4 = 64;
+						}
+						encoded += encoder[e1] + encoder[e2] + encoder[e3] + encoder[e4];
+					}
+					return encoded;
+				}
+
+				// Set if user requires jQuery to set Authorization header
+				if ( options.authByHeader === true && typeof options.username !== "undefined" ) {
+					headers.Authorization =
+						"Basic " + generateBase64( options.username + ":" + options.password );
 				}
 
 				// Set headers
